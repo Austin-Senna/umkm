@@ -1,14 +1,47 @@
-'use client';
+import { createClient } from '@supabase/supabase-js';
+import LogoGeneratorClient from './logo-generator-client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import LogoGenerator from '@/components/LogoGenerator';
-import { getBusinessInfoNeo } from '@/lib/api';
-import supabaseClient from '@/app/lib/supabase';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+// Create a Supabase client for the server component
+const supabaseClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+interface GenerateLogoProps {
+  params: {
+    id: string;
+    businessId: string;
+  };
+}
+
+// Server Component
+export default async function GenerateLogoPage({ params }: GenerateLogoProps) {
+  return <LogoGeneratorClient id={params.id} businessId={params.businessId} />;
+}
+
+// This function is called at build time on the server
+export async function generateStaticParams() {
+  try {
+    // Get all businesses from the database
+    const { data: businesses, error } = await supabaseClient
+      .from('businesses')
+      .select('user_id, business_id');
+
+    if (error) {
+      console.error('Error fetching businesses for static params:', error);
+      return [];
+    }
+
+    // Return all possible combinations of id and businessId
+    return (businesses || []).map((business: { user_id: string; business_id: string }) => ({
+      id: business.user_id,
+      businessId: business.business_id,
+    }));
+  } catch (error) {
+    console.error('Error in generateStaticParams:', error);
+    return [];
+  }
+}
 
 interface BusinessInfo {
   id: string;

@@ -1,49 +1,17 @@
-import { createClient } from '@supabase/supabase-js';
-import DashboardClient from './dashboard-client';
+'use client';
 
-// Create a Supabase client for the server component
-const supabaseClient = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import NavDash from '@/components/dashboardnav';
+import { User } from '@supabase/supabase-js';
+import BusinessTab from '@/components/business-tab';
+import WebsiteTab from '@/components/website-tab';
+import supabaseClient from '@/app/lib/supabase';
+import GuideTab from '@/components/guideoutput';
 
-interface DashboardProps {
-  params: {
-    id: string;
-    businessId: string;
-  };
-}
-
-// Server Component
-export default async function DashboardPage({ params }: DashboardProps) {
-  // The Client Component will handle all the client-side logic
-  return <DashboardClient id={params.id} businessId={params.businessId} />;
-}
-
-// This function is called at build time on the server
-export async function generateStaticParams() {
-  try {
-    // Get all businesses from the database
-    const { data: businesses, error } = await supabaseClient
-      .from('businesses')
-      .select('user_id, business_id');
-
-    if (error) {
-      console.error('Error fetching businesses for static params:', error);
-      return [];
-    }
-
-    // Return all possible combinations of id and businessId
-    return (businesses || []).map((business: { user_id: string; business_id: string }) => ({
-      id: business.user_id,
-      businessId: business.business_id,
-    }));
-  } catch (error) {
-    console.error('Error in generateStaticParams:', error);
-    return [];
-  }
-}
-// End of file
+interface BusinessData {
+  businessId: string;
+  businessName: string;
   ownerName: string;
   description: string;
   category: 'restaurant' | 'retail' | 'service' | 'other';
@@ -58,38 +26,23 @@ export async function generateStaticParams() {
   createdAt: string;
   websiteUrl?: string;
   websiteGenerated?: boolean;
+  subdomain?: string;
 }
 
-interface DashboardProps {
-  params: Promise<{ id: string; businessId: string }>;
+interface DashboardClientProps {
+  id: string;
+  businessId: string;
 }
 
-export default function Dashboard({ params }: DashboardProps) {
+export default function DashboardClient({ id, businessId }: DashboardClientProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [businessData, setBusinessData] = useState<BusinessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [businessId, setBusinessId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'business-info' | 'website' | 'guide'>('business-info');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  useEffect(() => {
-    const initializePage = async () => {
-      try {
-        const resolvedParams = await params;
-        console.log('Resolved businessId:', resolvedParams.businessId);
-        setBusinessId(resolvedParams.businessId);
-      } catch (err) {
-        console.error('Error resolving params:', err);
-        setError('Failed to load business ID');
-        setLoading(false);
-      }
-    };
-
-    initializePage();
-  }, [params]);
 
   useEffect(() => {
     const checkUserAndLoadBusiness = async () => {
@@ -110,26 +63,10 @@ export default function Dashboard({ params }: DashboardProps) {
             .eq('business_id', businessId)
             .single();
 
-            // If not found by id, try by business_id
-            if (businessError || !business) {
-              console.log('Not found by id, trying business_id:', businessId);
-              const { data: businessByBusinessId, error: businessIdError } = await supabaseClient
-                .from('businesses')
-                .select('*')
-                .eq('business_id', businessId)
-                .single();
-            
-            }
-
-            if (businessError || !business) {
-              setError('Business not found');
-              setLoading(false);
-              return;
-            }
-
-            // Transform the database data to match the frontend interface
+          // Transform the database data to match the frontend interface
+          if (business) {
             const transformedBusiness = {
-              businessId: business.business_id, // Use the database id as businessId
+              businessId: business.business_id,
               businessName: business.business_name,
               ownerName: business.owner_name,
               description: business.description,
@@ -148,15 +85,9 @@ export default function Dashboard({ params }: DashboardProps) {
               subdomain: business.subdomain
             };
 
-            console.log('=== BUSINESS DATA DEBUG ===');
-            console.log('Original business from DB:', business);
-            console.log('Transformed business:', transformedBusiness);
-            console.log('businessId from URL:', businessId);
-            console.log('transformedBusiness.businessId:', transformedBusiness.businessId);
-            console.log('=== END BUSINESS DATA DEBUG ===');
-
             setBusinessData(transformedBusiness);
           }
+        }
       } catch (err) {
         console.error('Error loading business:', err);
         setError('Failed to load business data');
@@ -165,13 +96,11 @@ export default function Dashboard({ params }: DashboardProps) {
       }
     };
 
-    if (businessId) {
-      checkUserAndLoadBusiness();
-    }
+    checkUserAndLoadBusiness();
   }, [businessId, router]);
 
   const handleCreateMenu = () => {
-    router.push(`/${user?.id}/${businessId}/create-menu`);
+    router.push(`/${id}/${businessId}/create-menu`);
   };
 
   const handleViewWebsite = () => {
@@ -181,7 +110,7 @@ export default function Dashboard({ params }: DashboardProps) {
   };
 
   const handleGenerateWebsite = () => {
-    router.push(`/${user?.id}/${businessId}/generate-website`);
+    router.push(`/${id}/${businessId}/generate-website`);
   };
 
   const handleBusinessUpdate = (updatedData: BusinessData) => {
@@ -222,7 +151,7 @@ export default function Dashboard({ params }: DashboardProps) {
         throw new Error('No valid session found');
       }
 
-      const response = await fetch(`'https://umkm-eight.vercel.app/api/businesses/${businessData.businessId}`, {
+      const response = await fetch(`https://umkm-eight.vercel.app/api/businesses/${businessData.businessId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${session.access_token}`,
@@ -287,7 +216,7 @@ export default function Dashboard({ params }: DashboardProps) {
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Business Not Found</h1>
-            <p className="text-gray-600">The business you&apos;re looking for doesn&apos;t exist.</p>
+            <p className="text-gray-600">The business you're looking for doesn't exist.</p>
             {businessId && (
               <p className="text-sm text-gray-500 mt-2">Business ID: {businessId}</p>
             )}
@@ -459,47 +388,5 @@ export default function Dashboard({ params }: DashboardProps) {
         )}
       </div>
     </div>
-  );
-}
-
-// Guide Tab Component
-function GuideTab({ businessData }: { businessData: BusinessData }) {
-  const [lang, setLang] = useState<'en' | 'id'>('en');
-
-  // Import GuideOutput component dynamically
-  const [GuideOutput, setGuideOutput] = useState<React.ComponentType<{ data: Record<string, unknown> }> | null>(null);
-
-  useEffect(() => {
-    import('@/components/guideoutput').then((module) => {
-      setGuideOutput(() => module.default);
-    });
-  }, []);
-
-  if (!GuideOutput) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-      </div>
-    );
-  }
-
-  // Transform businessData to match GuideOutput interface
-  const guideData = {
-    businessId : businessData.businessId,
-    businessName: businessData.businessName,
-    ownerName: businessData.ownerName,
-    description: businessData.description,
-    category: businessData.category,
-    products: businessData.products,
-    phone: businessData.phone,
-    email: businessData.email,
-    address: businessData.address,
-    whatsapp: businessData.whatsapp,
-    instagram: businessData.instagram,
-  };
-
-  return (
-      <GuideOutput data={guideData} />
-      
   );
 }

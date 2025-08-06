@@ -1,4 +1,68 @@
-'use client'
+import { createClient } from '@supabase/supabase-js';
+
+// Create a Supabase client for the server component
+const supabaseClient = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+interface PreviewProps {
+  params: {
+    webId: string;
+  };
+}
+
+// Server Component
+export default async function PreviewPage({ params }: PreviewProps) {
+  // Fetch the website data at build time
+  const { data: website, error } = await supabaseClient
+    .from('websites')
+    .select('html')
+    .eq('id', params.webId)
+    .single();
+
+  if (error || !website) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-red-600">Website Not Found</h1>
+          <p className="text-gray-600 mt-2">The website preview you're looking for doesn't exist.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Return the raw HTML as a static preview
+  return (
+    <div 
+      className="preview-container"
+      dangerouslySetInnerHTML={{ __html: website.html || 'No preview available' }}
+    />
+  );
+}
+
+// This function is called at build time on the server
+export async function generateStaticParams() {
+  try {
+    // Get all websites from the database
+    const { data: websites, error } = await supabaseClient
+      .from('websites')
+      .select('id');
+
+    if (error) {
+      console.error('Error fetching websites for static params:', error);
+      return [];
+    }
+
+    // Return all possible webId parameters
+    return (websites || []).map((website: { id: string }) => ({
+      webId: website.id,
+    }));
+  } catch (error) {
+    console.error('Error in generateStaticParams:', error);
+    return [];
+  }
+}
 import React, { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import NavDash from '@/components/dashboardnav'

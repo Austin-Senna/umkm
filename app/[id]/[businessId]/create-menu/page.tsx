@@ -1,125 +1,32 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
 import supabaseClient from '@/app/lib/supabase';
+import MenuCreatorClient from './menu-creator-client';
 
-interface Product {
-  id: string;
-  name: string;
-  price: string;
-  description: string;
-  imageUrl?: string;
+export const dynamic = 'force-dynamic';
+
+export const metadata = {
+  title: 'Create Menu',
+  description: 'Create and manage your business menu',
+};
+
+export default async function MenuCreatorPage({ params }: { params: { id: string; businessId: string } }) {
+  return (
+    <div>
+      <MenuCreatorClient id={params.id} businessId={params.businessId} />
+    </div>
+  );
 }
 
-interface MenuItem {
-  id: string;
-  name: string;
-  products: Product[];
-}
+export async function generateStaticParams() {
+  const { data: businesses } = await supabaseClient
+    .from('businesses')
+    .select('business_id, user_id');
+  
+  if (!businesses) return [];
 
-interface Menu {
-  id: string;
-  businessId: string;
-  name: string;
-  sections: MenuItem[];
-  created_at: string;
-  updated_at: string;
-}
-
-interface BusinessData {
-  id: string;
-  status?:string;
-  business_id: string;
-  business_name: string;
-  owner_name: string;
-  description: string;
-  category: 'restaurant' | 'retail' | 'service' | 'other';
-  products: string;
-  subdomain?: string;
-  phone: string;
-  email: string;
-  address: string;
-  whatsapp: string;
-  instagram: string;
-  logo_url: string;
-  user_id: string;
-  created_at: string;
-  website_url?: string;
-  deployed_at?: string;
-}
-
-export default function CreateMenuPage() {
-  const params = useParams();
-  const router = useRouter();
-  const [businessData, setBusinessData] = useState<BusinessData | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [draggedProduct, setDraggedProduct] = useState<Product | null>(null);
-  const [newMenuItemName, setNewMenuItemName] = useState('');
-  const [menuName, setMenuName] = useState('');
-  const [existingMenu, setExistingMenu] = useState<Menu | null>(null);
-
-  useEffect(() => {
-    loadBusinessData();
-  }, []);
-
-  const loadBusinessData = async () => {
-    try {
-      const { id, businessId } = params as { id: string; businessId: string };
-      
-      // Load business data
-      const { data: business, error: businessError } = await supabaseClient
-        .from('businesses')
-        .select('*')
-        .eq('business_id', businessId)
-        .single();
-      console.log(business)
-
-      if (businessError) throw businessError;
-      setBusinessData(business);
-
-      // Load products
-      const { data: productsData, error: productsError } = await supabaseClient
-        .from('products')
-        .select('*')
-        .eq('business_id', businessId);
-
-      if (productsError) throw productsError;
-      setProducts(productsData || []);
-
-      // Load existing menu
-      const { data: menuData, error: menuError } = await supabaseClient
-        .from('menus')
-        .select('*')
-        .eq('businessId', businessId)
-        .single();
-
-      if (menuData && !menuError) {
-        setExistingMenu(menuData);
-        setMenuName(menuData.name || '');
-        
-        // Convert submenus back to menuItems format
-        if (menuData.submenus) {
-          const convertedMenuItems: MenuItem[] = [];
-          const usedProductIds: string[] = [];
-          
-          Object.entries(menuData.submenus).forEach(([sectionName, productIds]) => {
-            const productIdsArray = productIds as string[];
-            const sectionProducts = productsData?.filter(product => 
-              productIdsArray.includes(product.id)
-            ) || [];
-            
-            convertedMenuItems.push({
-              id: `menu-${sectionName}-${Date.now()}`,
-              name: sectionName,
-              products: sectionProducts
-            });
-            
-            usedProductIds.push(...productIdsArray);
-          });
+  return businesses.map((business) => ({
+    id: business.user_id,
+    businessId: business.business_id,
+  }));
           
           setMenuItems(convertedMenuItems);
           setProducts(prev => prev.filter(p => !usedProductIds.includes(p.id)));
